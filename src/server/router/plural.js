@@ -255,6 +255,8 @@ module.exports = (db, name, opts) => {
   // POST /name
   function create(req, res, next) {
     let resource
+     const _embed = req.query._embed;
+    const _expand = req.query._expand;
     if (opts._isFake) {
       const id = db.get(name).createId().value()
       resource = { ...req.body, id }
@@ -262,11 +264,22 @@ module.exports = (db, name, opts) => {
       resource = db.get(name).insert(req.body).value()
     }
 
-    res.setHeader('Access-Control-Expose-Headers', 'Location')
-    res.location(`${getFullURL(req)}/${resource.id}`)
+     if (resource) {
+      // Clone resource to avoid making changes to the underlying object
+      const clone = _.cloneDeep(resource)
 
-    res.status(201)
-    res.locals.data = resource
+      // Embed other resources based on resource id
+      // /posts/1?_embed=comments
+      embed(clone, _embed)
+
+      // Expand inner resources based on id
+      // /posts/1?_expand=user
+      expand(clone, _expand)
+      res.setHeader('Access-Control-Expose-Headers', 'Location');
+      res.location(`${getFullURL(req)}/${resource.id}`);
+      res.status(201);
+      res.locals.data = clone
+    }
 
     next()
   }
@@ -275,8 +288,8 @@ module.exports = (db, name, opts) => {
   // PATCH /name/:id
   function update(req, res, next) {
     const id = req.params.id
-    const _embed = req.query._embed
-    const _expand = req.query._expand
+    const _embed = req.query._embed;
+    const _expand = req.query._expand;
     let resource
 
     if (opts._isFake) {
